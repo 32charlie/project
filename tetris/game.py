@@ -1,158 +1,6 @@
-import os
-import random  # Импортируем модуль random для генерации случайных чисел
-import pygame  # Импортируем библиотеку Pygame, которая используется для создания игр
-
-data_score = open(fr'{os.path.abspath(os.getcwd())}\data\results.txt', 'r')  # База данных результатов
-a = data_score.readlines().copy()
-data = a if a != [] else [0]
-data_score.close()
-# Определение цвета
-BLACK = (0, 0, 0)  # Определяем черный цвет в RGB
-WHITE = (255, 255, 255)  # Определяем белый цвет в RGB
-YELLOW = (255, 255, 0)  # Определяем желтый цвет в RGB
-GREEN = (0, 255, 0)  # Определяем зелёный цвет в RGB
-DARK_YELLOW = (200, 200, 0)  # Определяем темный желтый цвет в RGB
-# Определение доступных цветов для фигур
-COLORS = [
-    (255, 0, 0),  # Красный
-    (0, 255, 0),  # Зеленый
-    (0, 0, 255),  # Синий
-    (0, 255, 255),  # Циан
-    (255, 0, 255),  # Магента
-    (255, 165, 0)  # Оранжевый
-]
-
-# Размеры клетки и игрового поля
-BLOCK_SIZE = 25  # Размер одного блока (клеточки) в пикселях
-BOARD_WIDTH = 250 // BLOCK_SIZE  # Количество клеток по ширине (10 блоков)
-BOARD_HEIGHT = 500 // BLOCK_SIZE  # Количество клеток по высоте (20 блоков)
-
-# Размеры окна
-SCREEN_WIDTH = 750  # Ширина окна в пикселях
-SCREEN_HEIGHT = 700  # Высота окна в пикселях
-
-# Формы Тетромино (фигур) как двумерные списки
-TETROMINOS = [
-    [[1, 1, 1, 1]],  # I-образная фигура
-    [[1, 1], [1, 1]],  # O-образная фигура
-    [[0, 1, 0], [1, 1, 1]],  # T-образная фигура
-    [[1, 1, 0], [0, 1, 1]],  # S-образная фигура
-    [[0, 1, 1], [1, 1, 0]],  # Z-образная фигура
-    [[1, 0, 0], [1, 1, 1]],  # L-образная фигура
-    [[0, 0, 1], [1, 1, 1]],  # J-образная фигура
-]
-KOUNT = 0
-LST_COEFF = {1: 0.95, 2: 0.92, 3: 0.85}
-pygame.mixer.init()
-game_music = pygame.mixer.Sound('data/game_phresh.mp3')
-pygame.mixer.music.load('data/game_phresh.mp3')
-pygame.mixer.music.set_volume(0.3)
-
-
-# Определение главного класса Тетриса
-class Tetris:
-    def __init__(self):
-        # Инициализация игрового поля и необходимых переменных
-        self.board = [[0] * BOARD_WIDTH for _ in range(BOARD_HEIGHT)]  # Создаем 2D-массив для доски
-        self.current_tetromino = self.new_tetromino()  # Получаем новую фигуру
-        # Устанавливаем позицию фигуры на поле
-        self.current_position = [0, BOARD_WIDTH // 2 - len(self.current_tetromino[0]) // 2]
-        # Создаем список доступных цветов отбора
-        self.available_colors = COLORS[:]  # Копируем список цветов
-        self.last_color = None  # Хранит предыдущий цвет
-        self.current_color = self.get_new_color()  # Определение начального цвета
-        self.level = 1  # Инициализация уровня игры
-        self.next_tetromino = self.new_tetromino()  # Генерация следующей фигуры
-        self.next_color = self.get_new_color()  # Получение цвета следующей фигуры
-        self.score = 0
-
-    def new_tetromino(self):
-        # Генерация новой фигуры случайным образом из списка TETROMINOS
-        return random.choice(TETROMINOS)
-
-    def get_new_color(self):
-        # Получие нового цвета для текущей фигуры
-        if len(self.available_colors) == 0:  # Проверка, если список цветов пуст
-            self.available_colors = COLORS[:]  # Если да, восстанавливаем полный список цветов
-        # Случайный выбор цвета
-        new_color = random.choice(self.available_colors)
-        self.available_colors.remove(new_color)  # Удаляем использованный цвет из списка
-        self.last_color = new_color  # Сохраняем последний использованный цвет
-        return new_color  # Возвращаем новый цвет
-
-    def rotate_tetromino(self):
-        # Поворот фигуры по часовой стрелке
-        self.current_tetromino = [list(row) for row in zip(*self.current_tetromino[::-1])]
-
-    def move_tetromino(self, dx, dy):
-        # Изменение положения фигуры
-        self.current_position[0] += dx  # Изменение по вертикали
-        self.current_position[1] += dy  # Изменение по горизонтали
-        if self.collision():  # Проверка на коллизию
-            self.current_position[0] -= dx  # Возврат назад по вертикали
-            self.current_position[1] -= dy  # Возврат назад по горизонтали
-            return False  # Возвращаем False при коллизии
-        return True  # Возвращаем True если движение без коллизии
-
-    def collision(self):
-        # Проверка на коллизию с другими фигурами и границами
-        shape = self.current_tetromino  # Получаем текущую форму фигуры
-        x, y = self.current_position  # Получаем текущие координаты фигуры
-        for i, row in enumerate(shape):
-            for j, cell in enumerate(row):
-                if cell:  # Если текущая ячейка не пустая
-                    # Проверка условий коллизии
-                    if (i + x >= BOARD_HEIGHT or  # Если выходит за низ поля
-                            j + y < 0 or  # Если выходит за левую границу
-                            j + y >= BOARD_WIDTH or  # Если выходит за правую границу
-                            isinstance(self.board[i + x][j + y], tuple)):  # Если ячейка занята другой фигурой
-                        return True  # Если есть коллизия, возвращаем True
-        return False  # Если коллизии нет, возвращаем False
-
-    def merge_tetromino(self):
-        # Смена текущей фигуры с игровым полем
-        shape = self.current_tetromino
-        x, y = self.current_position
-        for i, row in enumerate(shape):
-            for j, cell in enumerate(row):
-                if cell:
-                    # Запоминаем цвет вместе с фигурой
-                    self.board[i + x][j + y] = self.current_color
-
-    def clear_lines(self):
-        global KOUNT
-        # Очистка заполненных линий
-        lines_to_clear = [i for i, row in enumerate(self.board) if all(isinstance(cell, tuple) for cell in row)]
-        cleared_lines = len(lines_to_clear)  # Количество очищенных линий
-        # Обновление счёта в зависимости от количества очищенных линий
-        if cleared_lines > 0:
-            if cleared_lines == 1:
-                self.score += 100
-            elif cleared_lines == 2:
-                self.score += 300
-            elif cleared_lines == 3:
-                self.score += 700
-            elif cleared_lines == 4:
-                self.score += 1500
-        for i in lines_to_clear:
-            del self.board[i]  # Удаляем полностью заполненные линии
-            self.board.insert(0, [0] * BOARD_WIDTH)  # Вставляем новые пустые линии сверху
-            KOUNT += 1
-
-    def drop_tetromino(self):
-        # Движение фигуры вниз
-        if not self.move_tetromino(1, 0):  # Попытка переместить Тетромино вниз
-            self.merge_tetromino()  # Слить фигуру с доской
-            self.clear_lines()  # Очистить линии
-            self.current_tetromino = self.next_tetromino  # Перемещение следующей фигуры
-            self.current_color = self.next_color  # Установка цвета текущей фигуры
-            self.next_tetromino = self.new_tetromino()  # Генерация новой следующей фигуры
-            self.next_color = self.get_new_color()  # Получение цвета следующей фигуры
-            # Сбросить позицию для следующей фигуры
-            self.current_position = [0, BOARD_WIDTH // 2 - len(self.current_tetromino[0]) // 2]
-            if self.collision():  # Проверка на коллизии
-                return False  # Игра окончена
-        return True  # Игра продолжается
+import pygame
+from config import *
+from tetris import Tetris
 
 
 # Основной класс игры
@@ -230,7 +78,6 @@ class StartScreen:
             self.flag = 1
             self.flag_menu = True
         else:
-            pygame.mixer.music.play(-1)
             self.running = False  # Закрыть начальное окно
             game = Game(mode)
             game.run()  # Запуск основной игры с выбранным режимом
@@ -247,7 +94,6 @@ class StartScreen:
         self.screen.blit(text_three, (525, 620))
 
 
-# Основной класс игры
 class Game:
     def __init__(self, mode):
         pygame.init()
@@ -258,8 +104,8 @@ class Game:
         self.tetris = Tetris()  # Первая инициализация тетромино
         self.running = True  # Запуск игры
         self.fall_time = 0  # Время падения текущей фигуры
-        self.fall_speed = 500  # Падение каждую 500 мс (0.5 секунды)
-        self.side_move_time = 0  # Время бокового перемещения
+        self.fall_speed = 500  # Падение каждую 500 мс (0.5 секун
+        self.side_move_time = 0  # Время бокового перемещенияды)
         self.side_move_speed = 1000000  # Ограничение скорости бокового движения
         self.game_over = False  # Флаг окончания игры
         self.win = False
@@ -268,6 +114,8 @@ class Game:
         self.mode = mode  # Переменная для хранения выбранного режима
         self.speed_coeff = 0.95
         self.infinite = False
+        pygame.mixer.music.load('data/game_music.mp3')
+        pygame.mixer.music.set_volume(0.3)
 
     def draw_background(self):
         # Отрисовка фона
@@ -436,6 +284,7 @@ class Game:
 
     def run(self):
         # Основной игровой цикл
+        pygame.mixer.music.play(-1)
         self.mode = self.set_mode()  # Получаем режим из начального окна
         while self.running:
             self.draw_background()
@@ -454,7 +303,6 @@ class Game:
                 self.win = True
             self.draw_board()  # Рисуем игровое поле
             self.draw_current_tetromino()  # Отрисовка текущей фигуры
-            self.draw_current_speed()
             self.draw_next_tetromino()
             self.draw_score()
             self.draw_best_res()
@@ -494,10 +342,11 @@ class Game:
                         self.win = False  # Сброс флага окончания игры
                         self.fall_speed = 500
                     if button_rect_return.collidepoint(mouse_pos):  # Проверяем, нажата ли кнопка возврата
-                        pygame.mixer.music.stop()
+                        pygame.mixer.music.stop()  # Возвращаемся в начальное меню
                         start_back = StartScreen()
-                        start_back.run()  # Возвращаемся в начальное меню
+                        start_back.run()
                         self.running = False
+                        return False
                 if not self.paused and not self.win:  # Если игра не на паузе
                     if event.type == pygame.KEYDOWN:  # Если нажата клавиша
                         if not self.game_over:  # Если игра не окончена
@@ -526,8 +375,3 @@ class Game:
             pygame.display.flip()  # Обновляем экран
             self.clock.tick(60)  # Устанавливаем частоту обновления экрана (60 FPS)
         pygame.quit()  # Выход из Pygame
-
-
-if __name__ == '__main__':
-    start_screen = StartScreen()
-    start_screen.run()  # Запуск начального окна
